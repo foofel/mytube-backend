@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+
+    {
+      "name": "Node: Debug",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/upload.js",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "/home/foofel/.nvm/versions/node/v20.18.0/bin/node"
+    },
+    {
+      "name": "Bun: Debug + Watch",
+      "type": "bun",
+      "request": "launch",
+      "program": "${workspaceFolder}/index",
+      "args": ["--watch"],
+      "internalConsoleOptions": "openOnSessionStart",
+      "cwd": "${workspaceFolder}",
+    },
+    {
+      "name": "Bun: Attach",
+      "type": "node",
+      "request": "attach",
+      "port": 5858,
+      "internalConsoleOptions": "openOnSessionStart",
+    }
+  ]
+}
