@@ -51,8 +51,7 @@ tusServer.on("POST_CREATE", async (req: ServerRequest, upload: Upload, url: stri
   if (!user) {
     return Response.json({ error: "Authentication required" }, { status: 401 });
   }
-  const video_entry = await db.insert(videos).values({ userId: user.id }).returning();
-  await db.insert(uploads).values({ userId: user.id, tusId: upload.id, tusInfo: upload, videoId: video_entry[0]?.id })
+  await db.insert(uploads).values({ userId: user.id, tusId: upload.id, tusInfo: upload })
 })
 
 tusServer.on("POST_RECEIVE", async (req: ServerRequest, upload: Upload) => {
@@ -65,7 +64,6 @@ tusServer.on("POST_TERMINATE", async (req: ServerRequest, res: Response, id: str
   await db.transaction(async (tx) => {
     const upload = await tx.select().from(uploads).where(eq(uploads.tusId, id));
     await tx.delete(uploads).where(eq(uploads.tusId, id));
-    await tx.delete(videos).where(eq(videos.id, upload[0]?.videoId));
   });
 })
 

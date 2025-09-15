@@ -40,7 +40,7 @@ export async function getVideos(req: Request): Promise<Response> {
     .where(
       and(
         isNotNull(videos.publicId),
-        eq(videos.hidden, false)
+        ne(videos.visibilityState, 'private')
       )
     );
 
@@ -109,7 +109,7 @@ export async function getVideoEntry(req: Request): Promise<Response> {
     .where(
       and(
         isNotNull(videos.publicId),
-        eq(videos.hidden, false),
+        ne(videos.visibilityState, 'private'),
         eq(videos.publicId, public_id)
       )
     );

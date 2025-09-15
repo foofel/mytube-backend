@@ -77,7 +77,7 @@ export function clearSessionCookie(): string {
   return `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`;
 }
 
-export async function login(req: Request): Promise<Response> {
+export async function authLogin(req: Request): Promise<Response> {
   try {
     const body = await req.json();
     const { username, password } = body;
@@ -113,12 +113,13 @@ export async function login(req: Request): Promise<Response> {
   }
 }
 
-export async function logout(req: Request): Promise<Response> {
+export async function authLogout(req: Request): Promise<Response> {
   const sessionId = getSessionCookie(req);
 
-  if (sessionId) {
-    await destroySession(sessionId);
-  }
+    const user = await getUserByUsername(username);
+    if (!user) {
+      return Response.json({ error: "Invalid credentials" }, { status: 401 });
+    }
 
   return Response.json(
     { success: true },
@@ -127,6 +128,15 @@ export async function logout(req: Request): Promise<Response> {
       headers: { "Set-Cookie": clearSessionCookie() }
     }
   );
+}
+
+export async function authCheck(req: Request): Promise<Response> {
+    const user = await requireAuth(req);
+    if (!user) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+  return Response.json(true);
 }
 
 export async function requireAuth(req: Request): Promise<User | null> {

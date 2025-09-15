@@ -2,7 +2,7 @@ import { serve } from 'bun';
 import './src/orm'; // Initialize database
 
 // Import route handlers
-import { login, logout, requireAuth } from './src/auth';
+import { authCheck, authLogin, authLogout, requireAuth } from './src/auth';
 import { getOpenUploads, getVideoForUpload, tus_upload_auth_wrapper } from './src/tus';
 import { getVideoEntry, getVideos, updateVideoEntry } from './src/videos';
 
@@ -17,10 +17,13 @@ serve({
   routes: CORS({
     // Authentication routes
     "/api/auth/login": {
-      POST: login,
+      POST: authLogin,
     },
     "/api/auth/logout": {
-      POST: logout,
+      POST: authLogout,
+    },
+    "/api/auth/check": {
+      GET: authCheck,
     },
 
     // public video routes

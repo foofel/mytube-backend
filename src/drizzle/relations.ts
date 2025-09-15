@@ -1,30 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { videos, transcodeJobs, transcodeInfo, users, passwords, uploads, videoTagMap, videoTags } from "./schema";
-
-export const transcodeJobsRelations = relations(transcodeJobs, ({one}) => ({
-	video: one(videos, {
-		fields: [transcodeJobs.videoId],
-		references: [videos.id]
-	}),
-}));
-
-export const videosRelations = relations(videos, ({one, many}) => ({
-	transcodeJobs: many(transcodeJobs),
-	transcodeInfos: many(transcodeInfo),
-	user: one(users, {
-		fields: [videos.userId],
-		references: [users.id]
-	}),
-	uploads: many(uploads),
-	videoTagMaps: many(videoTagMap),
-}));
-
-export const transcodeInfoRelations = relations(transcodeInfo, ({one}) => ({
-	video: one(videos, {
-		fields: [transcodeInfo.videoId],
-		references: [videos.id]
-	}),
-}));
+import { users, passwords, videos, uploads, transcodeJobs, transcodeInfo, videoTagMap, videoTags } from "./schema";
 
 export const passwordsRelations = relations(passwords, ({one}) => ({
 	user: one(users, {
@@ -39,6 +14,17 @@ export const usersRelations = relations(users, ({many}) => ({
 	uploads: many(uploads),
 }));
 
+export const videosRelations = relations(videos, ({one, many}) => ({
+	user: one(users, {
+		fields: [videos.userId],
+		references: [users.id]
+	}),
+	uploads: many(uploads),
+	transcodeJobs: many(transcodeJobs),
+	transcodeInfos: many(transcodeInfo),
+	videoTagMaps: many(videoTagMap),
+}));
+
 export const uploadsRelations = relations(uploads, ({one}) => ({
 	video: one(videos, {
 		fields: [uploads.videoId],
@@ -47,6 +33,20 @@ export const uploadsRelations = relations(uploads, ({one}) => ({
 	user: one(users, {
 		fields: [uploads.userId],
 		references: [users.id]
+	}),
+}));
+
+export const transcodeJobsRelations = relations(transcodeJobs, ({one}) => ({
+	video: one(videos, {
+		fields: [transcodeJobs.videoId],
+		references: [videos.id]
+	}),
+}));
+
+export const transcodeInfoRelations = relations(transcodeInfo, ({one}) => ({
+	video: one(videos, {
+		fields: [transcodeInfo.videoId],
+		references: [videos.id]
 	}),
 }));
 
