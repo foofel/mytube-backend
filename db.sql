@@ -14,6 +14,7 @@ CREATE TABLE passwords (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TYPE video_visibility_state AS ENUM ('public', 'shareable', 'users', 'friends', 'private');
 CREATE TABLE videos (
     id          BIGSERIAL PRIMARY KEY,
     public_id   TEXT, -- youtube like
@@ -23,7 +24,7 @@ CREATE TABLE videos (
     dislikes    BIGINT NOT NULL DEFAULT 0 CHECK (dislikes >= 0),
     views       BIGINT NOT NULL DEFAULT 0 CHECK (views >= 0),
     user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE SET NULL, -- nullable to allow SET NULL
-    hidden      BOOLEAN NOT NULL DEFAULT true,
+    visibility_state video_visibility_state NOT NULL DEFAULT 'private',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -100,7 +101,6 @@ CREATE INDEX videos_user_id_idx    ON videos(user_id);
 CREATE INDEX videos_created_at_idx           ON videos(created_at);
 CREATE INDEX videos_public_id_idx            ON videos(public_id);
 CREATE INDEX videos_views_idx                ON videos(views);
-CREATE INDEX videos_not_hidden_recent_idx    ON videos(created_at DESC) WHERE hidden = false;
 
 -- Full-text search on title + description (expression GIN index)
 CREATE INDEX videos_fts_idx ON videos
