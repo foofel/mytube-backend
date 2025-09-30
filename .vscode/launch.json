@@ -2,6 +2,7 @@
   "version": "0.2.0",
   "configurations": [
 
+
     {
       "name": "Node: Debug",
       "type": "node",
@@ -15,16 +16,16 @@
       "type": "bun",
       "request": "launch",
       "program": "${workspaceFolder}/index",
-      "args": ["--watch"],
+      "args": [],
       "internalConsoleOptions": "openOnSessionStart",
       "cwd": "${workspaceFolder}",
     },
     {
       "name": "Bun: Attach",
-      "type": "node",
+      "type": "bun",
       "request": "attach",
-      "port": 5858,
+      "url": "ws://localhost:6499/bun",
       "internalConsoleOptions": "openOnSessionStart",
-    }
+    },
   ]
 }

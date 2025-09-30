@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { defineConfig } from 'drizzle-kit';
 
 const DB_USER = process.env.DB_USER || "postgres";

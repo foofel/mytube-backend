@@ -20,12 +20,11 @@ export const videosRelations = relations(videos, ({one, many}) => ({
 		references: [users.id]
 	}),
 	uploads: many(uploads),
-	transcodeJobs: many(transcodeJobs),
 	transcodeInfos: many(transcodeInfo),
 	videoTagMaps: many(videoTagMap),
 }));
 
-export const uploadsRelations = relations(uploads, ({one}) => ({
+export const uploadsRelations = relations(uploads, ({one, many}) => ({
 	video: one(videos, {
 		fields: [uploads.videoId],
 		references: [videos.id]
@@ -34,12 +33,13 @@ export const uploadsRelations = relations(uploads, ({one}) => ({
 		fields: [uploads.userId],
 		references: [users.id]
 	}),
+	transcodeJobs: many(transcodeJobs),
 }));
 
 export const transcodeJobsRelations = relations(transcodeJobs, ({one}) => ({
-	video: one(videos, {
-		fields: [transcodeJobs.videoId],
-		references: [videos.id]
+	upload: one(uploads, {
+		fields: [transcodeJobs.uploadId],
+		references: [uploads.id]
 	}),
 }));
 

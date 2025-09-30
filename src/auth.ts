@@ -1,24 +1,27 @@
 import { RedisClient } from "bun";
-import { getUserByUsername as dbGetUserByUsername, getUserById as dbGetUserById, getPasswordHash as dbGetPasswordHash } from './orm';
+import { db } from './orm';
+import { passwords, users } from "./drizzle/schema";
+import { eq } from "drizzle-orm";
 
 const REDIS_HOST = process.env.REDIS_HOST || "localhost";
 const REDIS_PORT = process.env.REDIS_PORT || "6379";
 
 const redis_client = new RedisClient(`redis://${REDIS_HOST}:${REDIS_PORT}`);
 
-interface User {
-  id: number;
-  name: string;
-  profile_image_path?: string;
+export interface User {
+    id: bigint;
+    displayName: string;
+    profileImagePath: string | null;
+    createdAt: string | null;
 }
 
 interface SessionData {
-  userId: number;
+  userId: string;
   username: string;
   createdAt: string;
 }
 
-const COOKIE_NAME = "mytube_session";
+const COOKIE_NAME = "btube_session";
 const SESSION_EXPIRY = 60 * 60 * 24 * 7; // 7 days in seconds
 
 function generateSessionId(): string {
@@ -34,11 +37,86 @@ async function hashPassword(password: string): Promise<string> {
   return key
 }
 
-async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  return await Bun.password.verify(password, storedHash, "argon2id");
+
+export async function authLogin(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { username, password } = body;
+
+    if (!username || !password) {
+      return Response.json({ error: "Username and password required" }, { status: 400 });
+    }
+
+    // Query user from database (you'll need to implement database connection)
+    // For now, this is a placeholder - replace with actual database query
+    //const user = await getUserByUsername(username);
+    const [loginUser] = await db.select().from(passwords).where(eq(passwords.name, username));
+    if (!loginUser) {
+      return Response.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    if (!await Bun.password.verify(password, loginUser.password, "argon2id")) {
+      return Response.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const sessionId = await createSession(loginUser.id, loginUser.name);
+
+    const [user] = await db.select().from(users).where(eq(users.id, loginUser.userId));
+
+    return Response.json(
+      user,
+      {
+        status: 200,
+        headers: { "Set-Cookie": setSessionCookie(sessionId) }
+      }
+    );
+  } catch (error) {
+    console.error("Login error:", error);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
-export async function createSession(userId: number, username: string): Promise<string> {
+export async function authLogout(req: Request): Promise<Response> {
+  const sessionId = getSessionCookie(req);
+  if (!sessionId) {
+    return Response.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  await destroySession(sessionId);
+
+  return Response.json(
+    { success: true },
+    {
+      status: 200,
+      headers: { "Set-Cookie": clearSessionCookie() }
+    }
+  );
+}
+
+export async function authCheck(req: Request): Promise<Response> {
+    const user = await requireAuth(req);
+    if (!user) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+  return Response.json(user);
+}
+
+export async function requireAuth(req: Request): Promise<typeof users.$inferSelect | null> {
+  const sessionId = getSessionCookie(req);
+  if (!sessionId) return null;
+
+  const session = await getSession(sessionId);
+  if (!session) return null;
+
+  // Get full user data from database
+  const [user] = await db.select().from(users).where(eq(users.id, session.userId));
+  return user ?? null;
+}
+
+
+
+export async function createSession(userId: string, username: string): Promise<string> {
   const sessionId = generateSessionId();
   const sessionData: SessionData = {
     userId,
@@ -75,90 +153,4 @@ export function setSessionCookie(sessionId: string): string {
 
 export function clearSessionCookie(): string {
   return `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`;
-}
-
-export async function authLogin(req: Request): Promise<Response> {
-  try {
-    const body = await req.json();
-    const { username, password } = body;
-
-    if (!username || !password) {
-      return Response.json({ error: "Username and password required" }, { status: 400 });
-    }
-
-    // Query user from database (you'll need to implement database connection)
-    // For now, this is a placeholder - replace with actual database query
-    const user = await getUserByUsername(username);
-    if (!user) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401 });
-    }
-
-    const passwordHash = await getPasswordHash(user.id);
-    if (!passwordHash || !await verifyPassword(password, passwordHash)) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401 });
-    }
-
-    const sessionId = await createSession(user.id, user.name);
-
-    return Response.json(
-      { success: true, user: { id: user.id, name: user.name } },
-      {
-        status: 200,
-        headers: { "Set-Cookie": setSessionCookie(sessionId) }
-      }
-    );
-  } catch (error) {
-    console.error("Login error:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-export async function authLogout(req: Request): Promise<Response> {
-  const sessionId = getSessionCookie(req);
-
-    const user = await getUserByUsername(username);
-    if (!user) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401 });
-    }
-
-  return Response.json(
-    { success: true },
-    {
-      status: 200,
-      headers: { "Set-Cookie": clearSessionCookie() }
-    }
-  );
-}
-
-export async function authCheck(req: Request): Promise<Response> {
-    const user = await requireAuth(req);
-    if (!user) {
-      return Response.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-  return Response.json(true);
-}
-
-export async function requireAuth(req: Request): Promise<User | null> {
-  const sessionId = getSessionCookie(req);
-  if (!sessionId) return null;
-
-  const session = await getSession(sessionId);
-  if (!session) return null;
-
-  // Get full user data from database
-  return await getUserById(session.userId);
-}
-
-// Database helper functions
-async function getUserByUsername(username: string): Promise<User | null> {
-  return await dbGetUserByUsername(username);
-}
-
-async function getUserById(id: number): Promise<User | null> {
-  return await dbGetUserById(id);
-}
-
-async function getPasswordHash(userId: number): Promise<string | null> {
-  return await dbGetPasswordHash(userId);
 }

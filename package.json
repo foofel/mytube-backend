@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "bun:watch": "bun --watch --inspect=5858 index",
-    "drizzle-pull": "drizzle-kit pull"
+    "drizzle-pull": "drizzle-kit pull && bun ./src/drizzle/fix-drizzle-schema.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.2.21",
@@ -20,7 +20,6 @@
     "@tus/server": "^2.3.0",
     "bullmq": "^5.58.5",
     "bun-routes-cors": "^0.2.3",
-    "dotenv": "^17.2.2",
     "drizzle-orm": "^0.44.5",
     "json-bigint": "^1.0.0",
     "tus-js-client": "^4.3.1"

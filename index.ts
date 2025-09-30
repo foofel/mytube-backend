@@ -1,15 +1,13 @@
 import { serve } from 'bun';
-import './src/orm'; // Initialize database
-
-// Import route handlers
+import './src/orm';
 import { authCheck, authLogin, authLogout, requireAuth } from './src/auth';
-import { getOpenUploads, getVideoForUpload, tus_upload_auth_wrapper } from './src/tus';
-import { getVideoEntry, getVideos, updateVideoEntry } from './src/videos';
-
-const PORT = parseInt(process.env.PORT || "6989");
-
-
+import { tus_upload_auth_wrapper } from './src/tus';
+import { getVideoInfoForVideoPage, getLandingPageVideos, addVideoDislike, addVideoView, addVideoLike, removeVideoDislike, removeVideoLike } from './src/videos';
 import CORS from "bun-routes-cors";
+import { removeVideoTags, searchTags, setVideoTags } from './src/tags';
+import { deleteVideo, getOwnVideos, getVideo, getVideoByTusID, updateVideo } from './src/admin';
+
+const PORT = parseInt(process.env.PORT || "8080");
 
 serve({
   port: PORT,
@@ -28,35 +26,45 @@ serve({
 
     // public video routes
     "/api/videos": {
-      GET: getVideos
+      GET: getLandingPageVideos
     },
-    "/api/video/:id": {
-      GET: getVideoEntry
+    "/api/video/:public_id": {
+      GET: getVideoInfoForVideoPage
     },
-    "/api/video/:id/like": {
-      POST: (a) => new Response("OK"),
+    "/api/video/:public_id/like": {
+      POST: addVideoLike,
+      DELETE: removeVideoLike
     },
-    "/api/video/:id/dislike": {
-      POST: (a) => new Response("OK"),
+    "/api/video/:public_id/dislike": {
+      POST: addVideoDislike,
+      DELETE: removeVideoDislike,
     },
-    "/api/video/:id/add_view": {
-      POST: (a) => new Response("OK"),
+    "/api/video/:public_id/views": {
+      POST: addVideoView,
     },
 
     // Video management routes
-    "/api/video/admin/:id": {
-      GET: getVideoEntry,
-      PATCH: updateVideoEntry,
+    "/api/video/admin/:public_id": {
+      GET: getVideo,
+      PATCH: updateVideo,
+      DELETE: deleteVideo,
     },
     "/api/video/admin/tus/:tus_id": {
-      GET: getVideoForUpload
+      GET: getVideoByTusID
+    },
+    "/api/video/admin/own": {
+      GET: getOwnVideos,
+    },
+    "/api/video/:public_id/tags": {
+      POST: setVideoTags,
+      DELETE: removeVideoTags
+    },
+    "/api/tags/suggest": {
+      POST: searchTags
     },
 
     // TUS and relates routes
     '/files/*': tus_upload_auth_wrapper,
-    "/api/uploads": {
-      GET: getOpenUploads,
-    },
 
     // Catch-all for unmatched API routes
     "/api/*": Response.json({ message: "API endpoint not found" }, { status: 404 }),
@@ -70,4 +78,4 @@ serve({
   },
 });
 
-console.log(`MyTube Backend listening on http://localhost:${PORT}`);
+console.log(`MyTube Backend listening on http://0.0.0.0:${PORT}`);

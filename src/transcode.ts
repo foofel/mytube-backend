@@ -1,22 +1,26 @@
 import { Job, Queue } from 'bullmq';
 import { Worker } from 'bullmq';
-import { generatePublicId } from './videos';
 import * as node_path from "node:path";
 import { $ } from "bun";
 import { db } from './orm';
-import { transcodeInfo, transcodeJobs, uploads, videoInfo, videos } from './drizzle/schema';
+import { transcodeInfo, transcodeJobs, uploads, videos } from './drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 
 const REDIS_HOST = process.env.REDIS_HOST || "localhost";
 const REDIS_PORT = process.env.REDIS_PORT || "6379";
 
-export const transcodeQueue = new Queue('transcode', {
+interface TranscodeJob {
+    tus_upload: Upload;
+    upload_entry: typeof uploads.$inferSelect;
+    video_entry: typeof videos.$inferSelect;
+}
+
+export const transcodeQueue = new Queue<TranscodeJob>('transcode', {
     connection: {
         host: REDIS_HOST,
         port: parseInt(REDIS_PORT),
     },
 });
-
 
 //////////
 
@@ -31,12 +35,6 @@ function hhmmssToSec(hms: string): number {
     if (!m) return 0;
     const [, hh, mm, ss] = m;
     return +hh * 3600 + +mm * 60 + parseFloat(ss);
-}
-
-function toNumberOrNull(v?: string) {
-    if (v == null || v === "") return null;
-    const n = Number(v.replace(/[^0-9.\-x]/g, "")); // keep digits, dot, minus, x (for "3.2x")
-    return Number.isFinite(n) ? n : null;
 }
 
 async function* streamLines(readable: ReadableStream<Uint8Array>) {
@@ -63,7 +61,7 @@ async function* streamLines(readable: ReadableStream<Uint8Array>) {
     }
 }
 
-async function runScript(job: Job<Payload>, transcode_output_path: string) {
+async function runScript(job: Job<TranscodeJob>, transcode_output_path: string, all_logs:Array<string>) {
 
     const { tus_upload, upload_entry } = job.data
 
@@ -140,11 +138,13 @@ async function runScript(job: Job<Payload>, transcode_output_path: string) {
                 }
             } else {
                 console.log(trimmed);
+                all_logs.push(trimmed);
                 await job.log(trimmed);
             }
         }
     })().catch((e) => {
         console.log(`[stdout read error] ${(e as Error).message}`)
+        all_logs.push(`[stdout read error] ${(e as Error).message}`)
         job.log(`[stdout read error] ${(e as Error).message}`)
     });
 
@@ -152,10 +152,12 @@ async function runScript(job: Job<Payload>, transcode_output_path: string) {
     (async () => {
         for await (const line of streamLines(child.stderr)) {
             console.log(`[stderr] ${line}`);
+            all_logs.push(`[stderr] ${line}`);
             await job.log(`[stderr] ${line}`);
         }
     })().catch((e) => {
         console.log(`[stderr read error] ${(e as Error).message}`)
+        all_logs.push(`[stderr read error] ${(e as Error).message}`);
         job.log(`[stderr read error] ${(e as Error).message}`)
     });
 
@@ -174,22 +176,37 @@ async function runScript(job: Job<Payload>, transcode_output_path: string) {
         throw new Error(`transcode.sh failed with exit code ${exitCode}`);
     }
 
-    return { outputDir: outDir, final: finalBlock };
+    return { outputDir: outDir, final: finalBlock, all_logs };
 }
 
 ///////////
 
 const transcodeWorker = new Worker('transcode',
-    async job => {
+    async (job: Job<TranscodeJob>) => {
         const { tus_upload, upload_entry, video_entry } = job.data
-        console.log(`new job (${tus_upload.metadata.filename})`, job.data)
+        console.log(`new job (${tus_upload.metadata?.filename})`, job.data)
 
-        const public_video_id = generatePublicId();
-        const transcode_output_path = `./data/videos/${public_video_id}`
+        const transcode_output_path = `./data/videos/${video_entry.publicId}`
 
-        const transcode_job_entry = await db.insert(transcodeJobs).values({ videoId: video_entry.id, inputPath: tus_upload.storage.path, outputId: public_video_id, outputPath: transcode_output_path, state: 'transcoding' }).returning();
-        await runScript(job, transcode_output_path);
-        await db.update(transcodeJobs).set({ state: 'completed' }).where(eq(transcodeJobs.id, transcode_job_entry[0]?.id));
+        if(!tus_upload.storage?.path) {
+            console.error("upload object had no storage path");
+            return;
+        }
+
+        const [ transcode_job_entry ] = await db.insert(transcodeJobs).values(
+            { uploadId: upload_entry.id, inputPath: tus_upload.storage.path, outputPath: transcode_output_path, state: 'transcoding' }
+        ).returning();
+        if(!transcode_job_entry) {
+            console.error("no transcode job entry created");
+            return;
+        }
+        let all_logs:Array<string> = []
+        try {
+            const job_result = await runScript(job, transcode_output_path, all_logs);
+        } catch(e) {
+            console.error(`error running transcode job: ${e}`)
+        }
+        await db.update(transcodeJobs).set({ state: 'completed', transcodeResult: all_logs.join("\n") }).where(eq(transcodeJobs.id, transcode_job_entry.id));
 
         const meta = await buildHlsMetadata(transcode_output_path);
         await db.insert(transcodeInfo).values({
@@ -223,12 +240,12 @@ const transcodeWorker = new Worker('transcode',
             })
         }
 
-        await db.update(videos).set({ publicId: public_video_id }).where(
+        await db.update(videos).set({ ready: true }).where(
             and(
                 eq(videos.id, video_entry.id)
             )
         )
-        console.log(`job done (${tus_upload.metadata.filename})`);
+        console.log(`job done (${tus_upload.metadata?.filename})`);
     }, {
     connection: {
         host: REDIS_HOST,
@@ -247,6 +264,7 @@ transcodeWorker.on("failed", (e) => {
 // hlsMetadata.ts
 // Bun + TypeScript: derive HLS metadata from master.m3u8 (no duplicated config)
 import { promises as fs } from "node:fs";
+import { Upload } from '@tus/server';
 
 type CodecInfo = {
     codecName: string | null;
@@ -465,7 +483,7 @@ export async function buildHlsMetadata(outDir: string): Promise<HlsMetadata> {
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
+        if (!line?.startsWith("#EXT-X-STREAM-INF:")) continue;
 
         const attrs = parseAttrs(line);
         const uriRel = (lines[i + 1] || "").trim();
