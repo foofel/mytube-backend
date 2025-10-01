@@ -4,8 +4,8 @@ import { authCheck, authLogin, authLogout, requireAuth } from './src/auth';
 import { tus_upload_auth_wrapper } from './src/tus';
 import { getVideoInfoForVideoPage, getLandingPageVideos, addVideoDislike, addVideoView, addVideoLike, removeVideoDislike, removeVideoLike } from './src/videos';
 import CORS from "bun-routes-cors";
-import { removeVideoTags, searchTags, setVideoTags } from './src/tags';
-import { deleteVideo, getOwnVideos, getVideo, getVideoByTusID, updateVideo } from './src/admin';
+import { searchTags } from './src/tags';
+import { deleteVideo, getOwnVideos, getVideo, getVideoByTusID, removeVideoTags, setVideoTags, updateVideo } from './src/admin';
 
 const PORT = parseInt(process.env.PORT || "8080");
 

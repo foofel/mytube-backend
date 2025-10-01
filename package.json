@@ -22,6 +22,7 @@
     "bun-routes-cors": "^0.2.3",
     "drizzle-orm": "^0.44.5",
     "json-bigint": "^1.0.0",
+    "sharp": "^0.34.4",
     "tus-js-client": "^4.3.1"
   }
 }

@@ -5,6 +5,8 @@ import { $ } from "bun";
 import { db } from './orm';
 import { transcodeInfo, transcodeJobs, uploads, videos } from './drizzle/schema';
 import { and, eq } from 'drizzle-orm';
+import sharp from 'sharp';
+import fs from 'node:fs/promises';
 
 const REDIS_HOST = process.env.REDIS_HOST || "localhost";
 const REDIS_PORT = process.env.REDIS_PORT || "6379";
@@ -179,6 +181,51 @@ async function runScript(job: Job<TranscodeJob>, transcode_output_path: string, 
     return { outputDir: outDir, final: finalBlock, all_logs };
 }
 
+/**
+ * Convert poster PNG to AVIF variants using Sharp
+ * Expects poster_lossless.png to already exist (created by transcode.sh)
+ */
+async function generatePosterImages(outputDir: string): Promise<void> {
+    const posterSrc = node_path.join(outputDir, 'poster_lossless.png');
+
+    // Verify the PNG was created by transcode.sh
+    try {
+        const stats = await fs.stat(posterSrc);
+        if (stats.size === 0) {
+            throw new Error('poster_lossless.png exists but is empty');
+        }
+    } catch (error) {
+        throw new Error(`poster_lossless.png not found at ${posterSrc}. Transcode script should have created it.`);
+    }
+
+    // AVIF conversion configurations (matching transcode.sh quality expectations)
+    const configs = [
+        { width: 854, name: 'poster_480p', quality: 80, effort: 6 },
+        { width: 1280, name: 'poster_720p', quality: 80, effort: 6 },
+        { width: 1920, name: 'poster_1080p', quality: 80, effort: 6 },
+        { width: 2560, name: 'poster_1440p', quality: 82, effort: 7 },
+        { width: 3840, name: 'poster_2160p', quality: 82, effort: 7 },
+    ];
+
+    // Convert all variants in parallel using Sharp
+    await Promise.all(
+        configs.map(async (config) => {
+            const outputPath = node_path.join(outputDir, `${config.name}.avif`);
+            await sharp(posterSrc)
+                .resize(config.width, null, {
+                    fit: 'inside',
+                    withoutEnlargement: true,
+                    kernel: 'lanczos3',
+                })
+                .avif({
+                    quality: config.quality,
+                    effort: config.effort,
+                })
+                .toFile(outputPath);
+        })
+    );
+}
+
 ///////////
 
 const transcodeWorker = new Worker('transcode',
@@ -203,6 +250,11 @@ const transcodeWorker = new Worker('transcode',
         let all_logs:Array<string> = []
         try {
             const job_result = await runScript(job, transcode_output_path, all_logs);
+
+            // Generate poster AVIF variants using Sharp (PNG already created by transcode.sh)
+            console.log(`Generating AVIF poster variants for ${video_entry.publicId}`);
+            await generatePosterImages(transcode_output_path);
+            console.log(`Poster AVIF variants generated successfully`);
         } catch(e) {
             console.error(`error running transcode job: ${e}`)
         }

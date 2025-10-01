@@ -9,7 +9,7 @@ const REDIS_PORT = process.env.REDIS_PORT || "6379";
 const redis_client = new RedisClient(`redis://${REDIS_HOST}:${REDIS_PORT}`);
 
 export interface User {
-    id: bigint;
+    id: number;
     displayName: string;
     profileImagePath: string | null;
     createdAt: string | null;

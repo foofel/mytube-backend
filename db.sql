@@ -94,7 +94,23 @@ CREATE TABLE video_tag_map (
 
 -- === Indexes & constraints implemented via CREATE INDEX (no ALTER) ===
 
+-- all index are for fast searching inside text
+create index video_tags_tag_lower_gin_trgm_idx on video_tags using gin (lower(tag) gin_trgm_ops);
+create index if not exists videos_title_lower_gin_trgm_idx on videos using gin (lower(title) gin_trgm_ops);
+create index if not exists videos_description_lower_gin_trgm_idx on videos using gin (lower(description) gin_trgm_ops);
+create index if not exists users_display_name_lower_gin_trgm_idx on users using gin (lower(display_name) gin_trgm_ops);
 
+create unique index if not exists uploads_tus_id_uq on uploads (tus_id);
+create index if not exists uploads_video_id_idx on uploads (video_id);
+create index if not exists uploads_user_id_created_at_idx on uploads (user_id, created_at desc);
+
+create index if not exists transcode_jobs_upload_id_idx on transcode_jobs (upload_id);
+create index if not exists transcode_jobs_state_created_at_idx on transcode_jobs (state);
+
+create index if not exists transcode_info_video_id_idx on transcode_info (video_id);
+
+-- useful?
+create index if not exists video_tag_map_tag_id_video_id_idx on video_tag_map (tag_id, video_id);
 
 -- === test data ===
 insert into users (display_name, profile_image_path) values ('JJ', 'jakob.png');

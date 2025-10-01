@@ -105,33 +105,17 @@ else
     "$OUT_DIR/%v/index.m3u8"
 fi
 
-# --- Poster thumbnail ---
-echo "[$(date '+%d.%m.%Y %H:%M:%S')] Creating poster thumbnails"
+# --- Poster thumbnail (PNG extraction only, AVIF conversion done in transcode.ts) ---
+echo "[$(date '+%d.%m.%Y %H:%M:%S')] Extracting poster frame"
 POSTER_SRC="poster_lossless.png"
 TS=00:00:02
 ffmpeg -hide_banner -nostats -v error -y -ss "$TS" -i "$IN" -frames:v 1 "$OUT_DIR/$POSTER_SRC"
-# fallback it TS was after movie length
+# fallback if TS was after movie length
 if [[ ! -s "$OUT_DIR/$POSTER_SRC" ]]; then
   ffmpeg -hide_banner -nostats -v error -y -i "$IN" -vframes 1 -f image2 "$OUT_DIR/$POSTER_SRC"
 fi
 
-cfg=(
-  "854   poster_480p    15   8"
-  "1280  poster_720p    15   8"
-  "1920  poster_1080p   15   8"
-  "2560  poster_1440p   15   7"
-  "3840  poster_2160p   15   7"
-)
-
-for line in "${cfg[@]}"; do
-  read -r W NAME CRF PRESET <<<"$line"
-  SVT_LOG=1 ffmpeg -hide_banner -nostats -v error -y -i "$OUT_DIR/$POSTER_SRC" \
-    -vf "scale='min($W,iw)':-2:flags=lanczos" \
-    -c:v libsvtav1 -crf "$CRF" -preset "$PRESET" \
-    "$OUT_DIR/${NAME}.avif"
-done
-
 echo "[$(date '+%d.%m.%Y %H:%M:%S')] Done"
 echo "  HLS master: $OUT_DIR/master.m3u8"
 echo "  MP4:        $OUT_DIR/progressive.mp4"
-echo "  Poster:     $OUT_DIR/poster_[res]p.avif"
+echo "  Poster PNG: $OUT_DIR/$POSTER_SRC"
