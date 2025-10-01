@@ -3,7 +3,7 @@ import { requireAuth } from "./auth";
 import { db } from "./orm";
 import { videos, videoTagMap, videoTags } from "./drizzle/schema";
 import { videoTagsRelations } from "./drizzle/relations";
-import { getValidVideo } from "./admin";
+import { getValidAdminVideo } from "./admin";
 
 // Create video entry after successful upload
 export async function searchTags(req: Request): Promise<Response> {

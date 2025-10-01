@@ -2,7 +2,7 @@ import { serve } from 'bun';
 import './src/orm';
 import { authCheck, authLogin, authLogout, requireAuth } from './src/auth';
 import { tus_upload_auth_wrapper } from './src/tus';
-import { getVideoInfoForVideoPage, getLandingPageVideos, addVideoDislike, addVideoView, addVideoLike, removeVideoDislike, removeVideoLike } from './src/videos';
+import { getVideoInfoForVideoPage, getLandingPageVideos, addVideoDislike, addVideoView, addVideoLike, removeVideoDislike, removeVideoLike, getSearchResultVideos } from './src/videos';
 import CORS from "bun-routes-cors";
 import { searchTags } from './src/tags';
 import { deleteVideo, getOwnVideos, getVideo, getVideoByTusID, removeVideoTags, setVideoTags, updateVideo } from './src/admin';
@@ -28,6 +28,12 @@ serve({
     "/api/videos": {
       GET: getLandingPageVideos
     },
+    "/api/videos/search": {
+      GET: getSearchResultVideos
+    },
+    //"/api/videos/suggest": {
+    //  POST: searchTags
+    //},
     "/api/video/:public_id": {
       GET: getVideoInfoForVideoPage
     },

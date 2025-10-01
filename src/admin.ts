@@ -5,47 +5,17 @@ import { db } from './orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { getTableColumns } from "drizzle-orm";
 
-export async function getValidVideo(user:User, public_id:string): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
-    if(!user) {
-      return { type: 'response', data: Response.json(null, { status: 400 }) };
-    }
 
-    let video = await db.query.videos.findFirst({
-        where: and(
-          eq(videos.publicId, public_id),
-        )
-    });
-
-    if(!video) {
-      return { type: 'response', data: Response.json(null, { status: 404 }) };
-    }
-
-    if(video?.userId != user.id) {
-      return { type: 'response', data: Response.json(null, { status: 404 }) };
-    }
-
-    return { type: 'video', data: video };
-}
-
-// Create video entry after successful upload
-export async function getVideo(req: Request): Promise<Response> {
-  try {
-    const user = await requireAuth(req);
-    if (!user) {
-      return Response.json({ error: "Authentication required" }, { status: 401 });
-    }
-
-    const public_id = req.params.public_id;
-    const { type, data } = await getValidVideo(user, public_id);
-    if(type === 'response') {
-      return data
-    }
-    return Response.json(data);
-  } catch (error) {
-    console.error("Create video entry error:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+export function generatePublicId(): string {
+  // Generate YouTube-like ID
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  let result = '';
+  for (let i = 0; i < 11; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+  return result;
 }
 
 /**
@@ -89,7 +59,79 @@ async function convertPosterToAVIF(videoDir: string, imageFile: File): Promise<v
   );
 }
 
-// Create video entry after successful upload
+export async function getValidAdminVideo(user:User, public_id:string, wth:any): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
+    if(!user) {
+      return { type: 'response', data: Response.json(null, { status: 400 }) };
+    }
+
+    const v = await db.query.videos.findFirst({
+      where: eq(videos.publicId, public_id),
+      with: {
+        videoTagMaps: {
+          columns: {},       // skip join table fields
+          with: { videoTag: true },
+        },
+      },
+    });
+
+    if(!v) {
+      return { type: 'response', data: Response.json(null, { status: 404 }) };
+    }
+
+    const { videoTagMaps, ...videoRest } = v
+    const video = v && {
+      ...videoRest,
+      tags: v.videoTagMaps.map(m => m.videoTag),
+    };
+
+
+    // const vCols = getTableColumns(videos);
+    // const tCols = getTableColumns(videoTags);
+    // let rows = await db.select({
+    //     video: vCols,
+    //     tag: tCols,
+    //   }).from(videos)
+    //   .innerJoin(videoTagMap, eq(videoTagMap.videoId, videos.id))
+    //   .innerJoin(videoTags, eq(videoTagMap.tagId, videoTags.id))
+    //   .where(eq(videos.publicId, public_id));
+    // if(rows.length == 0) {
+    //   return { type: 'response', data: Response.json(null, { status: 404 }) };
+    // }
+    // const video =
+    //   rows.length === 0
+    //     ? null
+    //     : {
+    //         ...rows[0]!.video,
+    //         tags: rows.map(r => r.tag), // collect all tags for that video
+    //       };
+
+    if(video?.userId != user.id) {
+      return { type: 'response', data: Response.json(null, { status: 404 }) };
+    }
+
+    return { type: 'video', data: video };
+}
+
+
+export async function getVideo(req: Request): Promise<Response> {
+  try {
+    const user = await requireAuth(req);
+    if (!user) {
+      return Response.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const public_id = req.params.public_id;
+    const { type, data } = await getValidAdminVideo(user, public_id);
+    if(type === 'response') {
+      return data
+    }
+    return Response.json(data);
+  } catch (error) {
+    console.error("Create video entry error:", error);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 export async function updateVideo(req: Request): Promise<Response> {
   try {
     const user = await requireAuth(req);
@@ -98,7 +140,7 @@ export async function updateVideo(req: Request): Promise<Response> {
     }
 
     const public_id = req.params.public_id;
-    const { type, data } = await getValidVideo(user, public_id);
+    const { type, data } = await getValidAdminVideo(user, public_id);
     if(type === 'response') {
       return data
     }
@@ -112,6 +154,7 @@ export async function updateVideo(req: Request): Promise<Response> {
     const description = formData.get('description') as string | null;
     const visibilityState = formData.get('visibilityState') as string | null;
     const posterImage = formData.get('posterImage') as File | null;
+    const tags = formData.get('tags') as string | null;
 
     // Handle poster image upload if provided
     let posterImagePath: string | null = null;
@@ -142,6 +185,32 @@ export async function updateVideo(req: Request): Promise<Response> {
       }
     }
 
+    if(tags !== null) {
+      const tag_objects = JSON.parse(tags) as Array<{id?:number, tag?:string}>;
+      const tags_by_id = tag_objects.filter((t:any) => t.id !== undefined && t.id != null);
+      const new_tags = tag_objects.filter((t:any) => t.id === undefined || t.id === null).map((t) => {
+        return { tag: t.tag!.trim() }
+      });
+      const duplicate_tags = new_tags.length > 0 ? await db.select().from(videoTags).where(inArray(sql`lower(${videoTags.tag})`, new_tags.map(t => t.tag!.toLowerCase()))) : [];
+      const tags_to_create = new_tags.filter((nt) => {
+        return !duplicate_tags.find((et) => nt.tag?.toLowerCase() === et.tag.toLowerCase())
+      });
+      const tags_to_connect = tags_by_id.concat(duplicate_tags)
+      await db.transaction(async (tx) => {
+        if(tags_to_create.length > 0) {
+          const new_tag_ids = await tx.insert(videoTags).values(tags_to_create.map((t) => { return { tag: t.tag! } })).returning();
+          await tx.insert(videoTagMap).values(new_tag_ids.map((t) => { return { videoId: video.id, tagId: t.id }}));
+          tags_to_connect.push(...new_tag_ids);
+        }
+        // we simply remove all tags and create the ones we got new, if its an empty array we simply
+        // wont have tags anymore
+        await tx.delete(videoTagMap).where(eq(videoTagMap.videoId, video.id));
+        if(tags_to_connect.length > 0) {
+          await tx.insert(videoTagMap).values(tags_to_connect.map((t) => { return { videoId: video.id, tagId: t.id! }}));
+        }
+      });
+    }
+
     // Build update object with only provided fields
     const updateData: any = {};
     if (title !== null) updateData.title = title;
@@ -169,7 +238,7 @@ export async function deleteVideo(req: Request): Promise<Response> {
     }
 
     const public_id = req.params.public_id;
-    const { type, data } = await getValidVideo(user, public_id);
+    const { type, data } = await getValidAdminVideo(user, public_id);
     if(type === 'response') {
       return data
     }
@@ -243,16 +312,6 @@ export async function getVideoByTusID(req: Request) {
   return Response.json(my_videos[0]);
 }
 
-export function generatePublicId(): string {
-  // Generate YouTube-like ID
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-  let result = '';
-  for (let i = 0; i < 11; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
 // Create video entry after successful upload
 export async function setVideoTags(req: Request): Promise<Response> {
   try {
@@ -262,7 +321,7 @@ export async function setVideoTags(req: Request): Promise<Response> {
     }
 
     const public_id = req.params.public_id;
-    const { type, data } = await getValidVideo(user, public_id);
+    const { type, data } = await getValidAdminVideo(user, public_id);
     if(type === 'response') {
       return data
     }
@@ -335,7 +394,7 @@ export async function removeVideoTags(req: Request): Promise<Response> {
       ]
     */
     const public_id = req.params.public_id;
-    const { type, data } = await getValidVideo(user, public_id);
+    const { type, data } = await getValidAdminVideo(user, public_id);
     if(type === 'response') {
       return data
     }

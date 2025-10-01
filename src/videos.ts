@@ -1,6 +1,6 @@
-import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { requireAuth, type User } from './auth';
-import { transcodeInfo, users, videos } from './drizzle/schema';
+import { transcodeInfo, users, videos, videoTagMap, videoTags } from './drizzle/schema';
 import { db } from './orm';
 
 
@@ -8,6 +8,7 @@ import { db } from './orm';
 interface VideoListSearchFilters {
   video_id?:string | null,
   user?:User | null,
+  query?: string | null,
 }
 
 async function getVideoList(filters:VideoListSearchFilters) {
@@ -16,74 +17,95 @@ async function getVideoList(filters:VideoListSearchFilters) {
     // 'users' => if logged in (has account),
     // 'friends' => unused
     // 'private' => only uploader
-    let public_videos = await db.select({
-      id: videos.id,
-      publicId: videos.publicId,
-      title: videos.title,
-      description: videos.description,
-      ext_ref: videos.extRef,
-      gps: videos.gps,
-      poster: videos.posterImage,
-      likes: videos.likes,
-      dislikes: videos.dislikes,
-      views: videos.views,
-      userId: videos.userId,
-      createdAt: videos.createdAt,
-      updatedAt: videos.updatedAt,
-      streamInfo: {
-        id: transcodeInfo.id,
-        videoId: transcodeInfo.videoId,
-        path: transcodeInfo.path,
-        duration: transcodeInfo.duration,
-        sizeBytes: transcodeInfo.sizeBytes,
-        bitrateKbps: transcodeInfo.bitrateKbps,
-        videoCodec: transcodeInfo.videoCodec,
-        audioCodec: transcodeInfo.audioCodec,
-        pixelFormat: transcodeInfo.pixelFormat,
-        width: transcodeInfo.width,
-        height: transcodeInfo.height,
-        fps: transcodeInfo.fps,
-        metadata: transcodeInfo.metadata,
-        createdAt: transcodeInfo.createdAt,
-        updatedAt: transcodeInfo.updatedAt,
-      },
-      users: users
-    }).from(videos)
-    .innerJoin(users, eq(users.id, videos.userId))
-    .innerJoin(transcodeInfo, eq(transcodeInfo.videoId, videos.id))
-    .where(
-      and(
-        eq(videos.ready, true),
-        filters.video_id ? eq(videos.publicId, filters.video_id) : undefined,
-        or(
-          eq(videos.visibilityState, 'public'),
-          filters.user ? eq(videos.userId, filters.user.id) : undefined,
-          // no friends system yet
-          // no shareable system yet
-          filters.user ? eq(videos.visibilityState, 'users') : undefined
-        )
-      )
-    );
 
-    const seen_users = {}
-    const merged_streams = {}
-    for(const video of public_videos) {
-      const found_merge_group = merged_streams[video.id] || (() => {
-        let initial = { ...video, streams: [] }
-        delete initial.streamInfo
-        delete initial.user
-        return initial
-      })()
-      seen_users[video.users.id] = video.users;
-      found_merge_group.streams.push(video.streamInfo)
-      merged_streams[video.id] = found_merge_group
-    }
-    const video_list = Object.entries(merged_streams).map( e => e[1])
-    const video_list_sorted = video_list.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)) // desc
+    if(filters.query) {
+      const needle = sql`public.norm_ci(${filters.query})`;
 
-    return {
-      videos: video_list_sorted,
-      users: seen_users
+      await db.execute(sql`select set_limit(0.05)`);
+
+      // Drizzle relational query; Drizzle will do the necessary joins/secondary fetches
+      const rows = await db.query.videos.findMany({
+        with: {
+          user: true,                  // join user
+          transcodeInfos: true,        // join transcode
+          videoTagMaps: {
+            columns: {},               // omit join columns
+            with: { videoTag: true },
+          },
+        },
+        extras: {
+          score: sql<number>`
+              5 * similarity(public.norm_ci(${videos.title}), ${needle})
+              +   similarity(public.norm_ci(${videos.description}), ${needle})
+            `.as("score"),
+          sim: sql<number>`
+              GREATEST(
+                similarity(public.norm_ci(${videos.title}), ${needle}),
+                similarity(public.norm_ci(${videos.description}), ${needle})
+              )
+            `.as("sim")
+        },
+        where: (v) =>
+          and(
+            eq(videos.ready, true),
+            or(
+              sql`public.norm_ci(${v.title}) % ${needle}`,
+              sql`public.norm_ci(${v.description}) % ${needle}`,
+            ),
+            or(
+              eq(videos.visibilityState, 'public'),
+              filters.user ? eq(videos.userId, filters.user.id) : undefined,
+              filters.user ? eq(videos.visibilityState, 'users') : undefined
+            )
+          ),
+        // Order by our weighted score, then id desc as a tiebreaker
+        orderBy: (v) => [
+          desc(sql`
+            5 * similarity(public.norm_ci(${v.title}), ${needle})
+            +   similarity(public.norm_ci(${v.description}), ${needle})
+          `),
+          desc(v.id),
+        ],
+        limit: 50,
+      });
+      const public_videos = rows.map(({ videoTagMaps, ...v }) => ({
+        ...v,
+        tags: videoTagMaps.map((m) => m.videoTag), // Tag[]
+        // optionally: keep only the “best” transcode (example)
+        // bestTranscode: pickBest(v.transcodeInfos),
+      }));
+
+      return public_videos
+    } else {
+      const rows = await db.query.videos.findMany({
+        where: and(
+          eq(videos.ready, true),
+          filters.video_id ? eq(videos.publicId, filters.video_id) : undefined,
+          or(
+            eq(videos.visibilityState, 'public'),
+            filters.user ? eq(videos.userId, filters.user.id) : undefined,
+            filters.user ? eq(videos.visibilityState, 'users') : undefined
+          )
+        ),
+        orderBy: [desc(videos.createdAt)],
+        with: {
+          user: true, // pulls the whole user row (rename later if you wish)
+          transcodeInfos: true, // all transcodeInfo rows for the video
+          videoTagMaps: {
+            columns: {},          // omit join columns
+            with: { videoTag: true },
+          },
+        },
+      });
+
+      const public_videos = rows.map(({ videoTagMaps, ...v }) => ({
+        ...v,
+        tags: videoTagMaps.map((m) => m.videoTag), // Tag[]
+        // optionally: keep only the “best” transcode (example)
+        // bestTranscode: pickBest(v.transcodeInfos),
+      }));
+
+      return public_videos
     }
 }
 
@@ -92,6 +114,18 @@ export async function getLandingPageVideos(req: Request): Promise<Response> {
   const user = await requireAuth(req);
   try {
     const videoList = await getVideoList({ user: user });
+    return Response.json(videoList);
+  } catch (error) {
+    console.error("Get video info error:", error);
+    return Response.json({ error: "Internal server error" }, { status: 500 });;
+  }
+}
+
+export async function getSearchResultVideos(req: Request): Promise<Response> {
+  const user = await requireAuth(req);
+  try {
+    const { searchParams } = new URL(req.url)
+    const videoList = await getVideoList({ user: user, query: searchParams.get("query") });
     return Response.json(videoList);
   } catch (error) {
     console.error("Get video info error:", error);

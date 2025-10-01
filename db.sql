@@ -1,5 +1,4 @@
 -- === Base tables ===
-
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     display_name TEXT NOT NULL,
@@ -93,11 +92,24 @@ CREATE TABLE video_tag_map (
 );
 
 -- === Indexes & constraints implemented via CREATE INDEX (no ALTER) ===
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+CREATE OR REPLACE FUNCTION public.norm_ci(t text)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+BEGIN
+  RETURN lower(public.unaccent('public.unaccent'::regdictionary, coalesce(t,'')));
+END;
+$$;
 
 -- all index are for fast searching inside text
 create index video_tags_tag_lower_gin_trgm_idx on video_tags using gin (lower(tag) gin_trgm_ops);
-create index if not exists videos_title_lower_gin_trgm_idx on videos using gin (lower(title) gin_trgm_ops);
-create index if not exists videos_description_lower_gin_trgm_idx on videos using gin (lower(description) gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_videos_title_trgm_ci ON videos USING gin (public.norm_ci(title) gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_videos_desc_trgm_ci ON videos USING gin (public.norm_ci(description) gin_trgm_ops);
+
 create index if not exists users_display_name_lower_gin_trgm_idx on users using gin (lower(display_name) gin_trgm_ops);
 
 create unique index if not exists uploads_tus_id_uq on uploads (tus_id);
