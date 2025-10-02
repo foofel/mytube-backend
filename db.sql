@@ -85,15 +85,18 @@ CREATE TABLE video_tags (
 
 -- Join table (prevents duplicates via composite primary key)
 CREATE TABLE video_tag_map (
+    id BIGSERIAL PRIMARY KEY,
     video_id BIGINT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
     tag_id   BIGINT NOT NULL REFERENCES video_tags(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (video_id, tag_id)
+    unique (video_id, tag_id)
 );
 
 -- === Indexes & constraints implemented via CREATE INDEX (no ALTER) ===
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
+
+alter database postgres set pg_trgm.similarity_threshold = 0.05;
 
 CREATE OR REPLACE FUNCTION public.norm_ci(t text)
 RETURNS text

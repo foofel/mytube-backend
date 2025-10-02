@@ -19,4 +19,4 @@ BigInt.prototype.toJSON = function () {
 
 const pg = new SQL(`postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`);
 
-export const db = drizzle(pg, { schema: { ...schema, ...relations} });
+export const db = drizzle(pg, { schema: { ...schema, ...relations}, logger: true });
