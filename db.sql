@@ -43,7 +43,7 @@ CREATE TABLE uploads (
     tus_id      TEXT NOT NULL,
     tus_info    JSONB NOT NULL,
     state       upload_state_type NOT NULL DEFAULT 'created',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
 );
 
 CREATE TABLE transcode_jobs (
@@ -158,13 +158,15 @@ create index if not exists transcode_info_video_id_idx on transcode_info (video_
 create index if not exists video_tag_map_tag_id_video_id_idx on video_tag_map (tag_id, video_id);
 
 -- === test data ===
-insert into users (display_name, profile_image_path) values ('JJ', 'jakob.png');
-insert into users (display_name, profile_image_path) values ('Nora', 'nora.png');
-insert into users (display_name, profile_image_path) values ('Ber', 'ber.png');
-insert into users (display_name, profile_image_path) values ('Tom', 'tom.png');
+insert into users (display_name, profile_image_path) values ('Jakob', 'jakob.png'); -- Jakob or 0SCyIgMP7v
+insert into users (display_name, profile_image_path) values ('Nora', 'nora.png'); -- RnY5FYodqF
+insert into users (display_name, profile_image_path) values ('Ber', 'ber.png'); -- NDidCf0RLs
+insert into users (display_name, profile_image_path) values ('Tom', 'tom.png'); -- 4izzzkKJTq
+insert into users (display_name, profile_image_path) values ('Schötti', 'schoetti.png'); -- vzHMY6eBxv
 insert into passwords (user_id, name, password) values (1, 'jakob', '$argon2i$v=19$m=65535,t=2,p=1$cWVObnlISGJqblNmeDQwaQ$JVQUIzGKjMkM1rWIgvPwmNoiuQLFizQn+VQ04u1uLtI');
-insert into passwords (user_id, name, password) values (2, 'nora', '$argon2i$v=19$m=65535,t=2,p=1$aE1uU0IxSFdGaFNHcTFmNQ$H2FB1Odd/jk0nUyzLkK1p+X2QIPAQHiBLTJNvHvALHc');
-insert into passwords (user_id, name, password) values (3, 'ber', '$argon2i$v=19$m=65535,t=2,p=1$TUJjZlRScWFCOFJpN1U5bw$WZgzxDbCAyn9A9aTytrVNmHQr9UNc7FpUEvUa5be+Lg');
-insert into passwords (user_id, name, password) values (4, 'tom', '$argon2i$v=19$m=65535,t=2,p=1$alZMODZZREVyU0FWWDNXUw$7GS3FDTcgF6TQa9/rnIChkEt53f7iP/zWf7AvVCdZdA');
+insert into passwords (user_id, name, password) values (2, 'nora', '$argon2i$v=19$m=65535,t=2,p=1$MDNKWUl6T3ZKV2NEVGF5ZA$DMi3hb4Gnc4krnz/M15ioj667zRIRG76NxWx3mxokWY');
+insert into passwords (user_id, name, password) values (3, 'ber', '$argon2i$v=19$m=65535,t=2,p=1$dVgzcmdXZjQzbXBoRFFYSw$857rEiQ/EUZ7tdoyxXi6jLPytTlvMW/M0e/ODTnck88');
+insert into passwords (user_id, name, password) values (4, 'tom', '$argon2i$v=19$m=65535,t=2,p=1$enBFd3doOEFHcE01UVltOA$SFTEYp3LXAdTnu4bq39++y73BiIAheA8Mc3c5jpEbEA');
+insert into passwords (user_id, name, password) values (5, 'schötti', '$argon2i$v=19$m=65535,t=2,p=1$czRKVFhVTDRCbUg5QkoyZQ$1YVWnYJvqvai6OKHBkOu2wxU8a2Q/YKaQDENCbv3CEs');
 insert into video_tags (tag) values ('bongo'), ('bubbel'), ('hullu'), ('möp'), ('Gorge aux Châts'), ('Fontainbleau')
 

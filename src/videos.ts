@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gte, inArray, isNotNull, lt, ne, or, sql } from 'drizzle-orm';
 import { requireAuth, type User } from './auth';
 import { transcodeInfo, users, videos, videoTagMap, videoTags } from './drizzle/schema';
 import { db } from './orm';
@@ -8,7 +8,11 @@ import { db } from './orm';
 interface VideoListSearchFilters {
   requestUser?:User | null,
   query?: string | null,
-  tags?: Array<number>
+  tags?: Array<number>,
+  date_range?: {
+    start: Date|null,
+    end: Date|null
+  }
 }
 
 async function searchVideos(filters:VideoListSearchFilters) {
@@ -43,9 +47,17 @@ async function searchVideos(filters:VideoListSearchFilters) {
     filters.requestUser ? eq(videos.visibilityState, 'users') : undefined,
     eq(videos.visibilityState, 'public'),
   )
-  const searchFilter = or(
+  const searchFilter = and(
     tagIds.length ? inArray(videos.id, tagFilteredVideosSubq) : undefined,
-    filters.query ? similarity : undefined
+    filters.query ? similarity : undefined,
+    filters.date_range?.start && !filters.date_range?.end ? gte(videoTagMap.createdAt, filters.date_range.start.toISOString()) : undefined,
+    filters.date_range?.end && !filters.date_range?.start ? lt(videoTagMap.createdAt, filters.date_range.end.toISOString()) : undefined,
+    filters.date_range?.start && filters.date_range?.end ?
+      and(
+        gte(videoTagMap.createdAt, filters.date_range.start.toISOString()),
+        lt(videoTagMap.createdAt, filters.date_range.end.toISOString())
+      )
+      : undefined
   )
 
   // Drizzle relational query; Drizzle will do the necessary joins/secondary fetches

@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull, ne, or, inArray, sql } from 'drizzle-orm';
 import { requireAuth, type User } from './auth';
-import { transcodeInfo, transcodeJobs, uploads, users, videos, videoTags, videoTagMap } from './drizzle/schema';
+import { transcodeInfo, transcodeJobs, uploads as uploads_schema, users, videos, videoTags, videoTagMap, uploads } from './drizzle/schema';
 import { db } from './orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -60,54 +60,67 @@ async function convertPosterToAVIF(videoDir: string, imageFile: File): Promise<v
   );
 }
 
-export async function getValidAdminVideo(user:User, public_id:string): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
+export async function getValidAdminVideo(user:User, public_id:string|null, tus_id:string|null = null): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
     if(!user) {
       return { type: 'response', data: Response.json(null, { status: 400 }) };
     }
 
-    const v = await db.query.videos.findFirst({
-      where: eq(videos.publicId, public_id),
-      with: {
-        videoTagMaps: {
-          columns: {},       // skip join table fields
-          with: { videoTag: true },
+    let video = null
+    if(public_id) {
+      const v = await db.query.videos.findFirst({
+        where: and(
+          eq(videos.publicId, public_id),
+          eq(videos.userId, user.id)
+        ),
+        with: {
+          uploads: true,
+          videoTagMaps: {
+            columns: {},       // skip join table fields
+            with: { videoTag: true },
+          },
         },
-      },
-    });
+      });
 
-    if(!v) {
-      return { type: 'response', data: Response.json(null, { status: 404 }) };
-    }
+      if(!v) {
+        return { type: 'response', data: Response.json(null, { status: 404 }) };
+      }
+      const { videoTagMaps, uploads, ...videoRest } = v
+      const { tusInfo, ...rest } = uploads[0];
+      video = {
+        ...videoRest,
+        upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata }},
+        tags: v.videoTagMaps.map(m => m.videoTag),
+      };
+    } else if(tus_id) {
+      const u = await db.query.uploads.findFirst({
+        where: and(
+          eq(uploads.tusId, tus_id),
+          eq(uploads.userId, user.id)
+        ),
+        with: {
+          video: {
+            with: {
+              videoTagMaps: {
+                columns: {},       // skip join table fields
+                with: { videoTag: true },
+              }
+            }
+          }
+        },
+      });
 
-    const { videoTagMaps, ...videoRest } = v
-    const video = v && {
-      ...videoRest,
-      tags: v.videoTagMaps.map(m => m.videoTag),
-    };
+      if(!u) {
+        return { type: 'response', data: Response.json(null, { status: 404 }) };
+      }
 
-
-    // const vCols = getTableColumns(videos);
-    // const tCols = getTableColumns(videoTags);
-    // let rows = await db.select({
-    //     video: vCols,
-    //     tag: tCols,
-    //   }).from(videos)
-    //   .innerJoin(videoTagMap, eq(videoTagMap.videoId, videos.id))
-    //   .innerJoin(videoTags, eq(videoTagMap.tagId, videoTags.id))
-    //   .where(eq(videos.publicId, public_id));
-    // if(rows.length == 0) {
-    //   return { type: 'response', data: Response.json(null, { status: 404 }) };
-    // }
-    // const video =
-    //   rows.length === 0
-    //     ? null
-    //     : {
-    //         ...rows[0]!.video,
-    //         tags: rows.map(r => r.tag), // collect all tags for that video
-    //       };
-
-    if(video?.userId != user.id) {
-      return { type: 'response', data: Response.json(null, { status: 404 }) };
+      const { video: { videoTagMaps, ...videoRest }, tusInfo } = u
+      video = {
+        ...videoRest,
+        upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata }},
+        tags: videoTagMaps.map(m => m.videoTag),
+      };
+    } else {
+      return { type: 'response', data: Response.json(null, { status: 400 }) };
     }
 
     return { type: 'video', data: video };
@@ -316,13 +329,11 @@ export async function getVideoByTusID(req: Request) {
     return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   const tus_id = req.params.tus_id;
-  const my_videos = await db.select({ videos }).from(videos).innerJoin(uploads, eq(videos.id, uploads.videoId)).where(
-    and(
-      eq(uploads.userId, user.id),
-      eq(uploads.tusId, tus_id)
-    )
-  );
-  return Response.json(my_videos[0]);
+  const { type, data } = await getValidAdminVideo(user, null, tus_id);
+  if(type === 'response') {
+    return data
+  }
+  return Response.json(data);
 }
 
 // Create video entry after successful upload
