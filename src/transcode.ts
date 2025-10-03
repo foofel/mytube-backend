@@ -1,3 +1,4 @@
+import { notifyVideoProcessed, notifyNewVideo } from './notifications';
 import { Job, Queue } from 'bullmq';
 import { Worker } from 'bullmq';
 import * as node_path from "node:path";
@@ -297,6 +298,18 @@ const transcodeWorker = new Worker('transcode',
                 eq(videos.id, video_entry.id)
             )
         )
+
+        // Send push notifications
+        // Always notify the uploader that their video is ready
+        await notifyVideoProcessed(video_entry.id, video_entry.userId);
+
+        // If video is public or users, also notify all other users
+        if (video_entry.visibilityState === 'public' || video_entry.visibilityState === 'users') {
+          notifyNewVideo(video_entry.id, video_entry.userId).catch(err =>
+            console.error('Error sending new video notifications:', err)
+          );
+        }
+
         console.log(`job done (${tus_upload.metadata?.filename})`);
     }, {
     connection: {

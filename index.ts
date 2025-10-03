@@ -6,6 +6,7 @@ import { getVideoInfoForVideoPage, getLandingPageVideos, addVideoDislike, addVid
 import CORS from "bun-routes-cors";
 import { searchTags } from './src/tags';
 import { deleteVideo, getOwnVideos, getVideo, getVideoByTusID, removeVideoTags, setVideoTags, updateVideo } from './src/admin';
+import { getVapidPublicKeyHandler, subscribeToPushHandler, unsubscribeFromPushHandler, sendTestNotificationHandler } from './src/push';
 
 const PORT = parseInt(process.env.PORT || "8080");
 
@@ -67,6 +68,20 @@ serve({
     },
     "/api/tags/suggest": {
       POST: searchTags
+    },
+
+    // Push notification routes
+    "/api/push/vapid-public-key": {
+      GET: getVapidPublicKeyHandler,
+    },
+    "/api/push/subscribe": {
+      POST: subscribeToPushHandler,
+    },
+    "/api/push/unsubscribe": {
+      POST: unsubscribeFromPushHandler,
+    },
+    "/api/push/test": {
+      POST: sendTestNotificationHandler,
     },
 
     // TUS and relates routes

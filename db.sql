@@ -92,6 +92,36 @@ CREATE TABLE video_tag_map (
     unique (video_id, tag_id)
 );
 
+-- === Push Notifications ===
+CREATE TABLE push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    last_used TIMESTAMPTZ,
+    UNIQUE(user_id, endpoint)
+);
+
+CREATE TABLE notification_queue (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    video_id BIGINT REFERENCES videos(id) ON DELETE CASCADE,
+    notification_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    data JSONB,
+    sent_at TIMESTAMPTZ,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+CREATE INDEX idx_notification_queue_user_id ON notification_queue(user_id);
+CREATE INDEX idx_notification_queue_status ON notification_queue(status);
+
 -- === Indexes & constraints implemented via CREATE INDEX (no ALTER) ===
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;

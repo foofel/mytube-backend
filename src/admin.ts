@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { getTableColumns } from "drizzle-orm";
+import { notifyNewVideo } from './notifications';
 
 
 export function generatePublicId(): string {
@@ -59,7 +60,7 @@ async function convertPosterToAVIF(videoDir: string, imageFile: File): Promise<v
   );
 }
 
-export async function getValidAdminVideo(user:User, public_id:string, wth:any): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
+export async function getValidAdminVideo(user:User, public_id:string): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
     if(!user) {
       return { type: 'response', data: Response.json(null, { status: 400 }) };
     }
@@ -218,9 +219,21 @@ export async function updateVideo(req: Request): Promise<Response> {
     if (visibilityState !== null) updateData.visibilityState = visibilityState;
     //if (posterImagePath !== null) updateData.posterImage = posterImagePath;
 
+    // Check if video is becoming public or users (was private/shareable/friends before)
+    const wasNotPublicOrUsers = video.visibilityState !== 'public' && video.visibilityState !== 'users';
+    const becomingPublicOrUsers = visibilityState === 'public' || visibilityState === 'users';
+
     const [ updated ] = await db.update(videos).set(updateData).where(
           eq(videos.id, video.id)
     ).returning();
+
+    // Send notification if video just became public or users AND is ready
+    if (wasNotPublicOrUsers && becomingPublicOrUsers && video.ready) {
+      // Don't await - send notifications in background
+      notifyNewVideo(video.id, video.userId).catch(err =>
+        console.error('Error sending new video notifications:', err)
+      );
+    }
 
     return Response.json(updated);
 

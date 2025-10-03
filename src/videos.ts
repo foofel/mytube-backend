@@ -91,6 +91,7 @@ async function getVideo(user:User|null, public_id:string) {
         user ? eq(videos.visibilityState, 'users') : undefined,
         // TODO: or we are friends
         eq(videos.visibilityState, 'public'),
+        eq(videos.visibilityState, 'shareable'),
       )
     ),
     with: {
