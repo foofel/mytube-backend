@@ -6,7 +6,7 @@ import { db } from './orm';
 
 
 interface VideoListSearchFilters {
-  user?:User | null,
+  requestUser?:User | null,
   query?: string | null,
   tags?: Array<number>
 }
@@ -39,8 +39,8 @@ async function searchVideos(filters:VideoListSearchFilters) {
     desc(videos.createdAt),
   ]
   const accessRights = or(
-    filters.user ? eq(videos.userId, filters.user.id) : undefined,
-    filters.user ? eq(videos.visibilityState, 'users') : undefined,
+    filters.requestUser ? eq(videos.userId, filters.requestUser.id) : undefined,
+    filters.requestUser ? eq(videos.visibilityState, 'users') : undefined,
     eq(videos.visibilityState, 'public'),
   )
   const searchFilter = or(
@@ -115,7 +115,7 @@ async function getVideo(user:User|null, public_id:string) {
 export async function getLandingPageVideos(req: Request): Promise<Response> {
   const user = await requireAuth(req);
   try {
-    const videoList = await searchVideos({ user: user });
+    const videoList = await searchVideos({ requestUser: user });
     return Response.json(videoList);
   } catch (error) {
     console.error("Get video info error:", error);
@@ -128,7 +128,7 @@ export async function getSearchResultVideos(req: Request): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url)
     const tags = searchParams.get("tags")?.split(",").map(t => parseInt(t)).filter(t => !Number.isNaN(t));
-    const videoList = await searchVideos({ user: user, query: searchParams.get("query"), tags: tags });
+    const videoList = await searchVideos({ requestUser: user, query: searchParams.get("query"), tags: tags });
     return Response.json(videoList);
   } catch (error) {
     console.error("Get video info error:", error);
