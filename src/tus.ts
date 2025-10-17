@@ -99,6 +99,7 @@ export async function tus_upload_auth_wrapper(req: Request): Promise<Response> {
   if(req.method == "GET") {
     return Response.json({ error: "Access Forbidden" }, { status: 403 });
   }
+  //console.log(req);
   const res = await tusServer.handleWeb(req);
   res.headers.set('Access-Control-Allow-Origin', '*');
   res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH');

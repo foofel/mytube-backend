@@ -140,8 +140,9 @@ $$;
 
 -- all index are for fast searching inside text
 create index video_tags_tag_lower_gin_trgm_idx on video_tags using gin (lower(tag) gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_videos_title_trgm_ci ON videos USING gin (public.norm_ci(title) gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_videos_desc_trgm_ci ON videos USING gin (public.norm_ci(description) gin_trgm_ops);
+create index IF NOT EXISTS idx_videos_title_trgm_ci ON videos USING gin (public.norm_ci(title) gin_trgm_ops);
+create index IF NOT EXISTS idx_videos_desc_trgm_ci ON videos USING gin (public.norm_ci(description) gin_trgm_ops);
+create index videos_public_id_index on videos (public_id);
 
 create index if not exists users_display_name_lower_gin_trgm_idx on users using gin (lower(display_name) gin_trgm_ops);
 

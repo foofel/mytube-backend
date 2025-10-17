@@ -60,38 +60,13 @@ async function convertPosterToAVIF(videoDir: string, imageFile: File): Promise<v
   );
 }
 
-export async function getValidAdminVideo(user:User, public_id:string|null, tus_id:string|null = null): Promise<{type: 'response', data: Response}|{type: 'video', data: typeof videos.$inferSelect}> {
+export async function getValidAdminVideo(user:User, public_id:string|null, tus_id:string|null = null): Promise<{type: 'response', data: Response}|{type: 'video', data: any}> {
     if(!user) {
       return { type: 'response', data: Response.json(null, { status: 400 }) };
     }
 
     let video = null
-    if(public_id) {
-      const v = await db.query.videos.findFirst({
-        where: and(
-          eq(videos.publicId, public_id),
-          eq(videos.userId, user.id)
-        ),
-        with: {
-          uploads: true,
-          videoTagMaps: {
-            columns: {},       // skip join table fields
-            with: { videoTag: true },
-          },
-        },
-      });
-
-      if(!v) {
-        return { type: 'response', data: Response.json(null, { status: 404 }) };
-      }
-      const { videoTagMaps, uploads, ...videoRest } = v
-      const { tusInfo, ...rest } = uploads[0];
-      video = {
-        ...videoRest,
-        upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata }},
-        tags: v.videoTagMaps.map(m => m.videoTag),
-      };
-    } else if(tus_id) {
+    if(tus_id) {
       const u = await db.query.uploads.findFirst({
         where: and(
           eq(uploads.tusId, tus_id),
@@ -119,13 +94,75 @@ export async function getValidAdminVideo(user:User, public_id:string|null, tus_i
         upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata }},
         tags: videoTagMaps.map(m => m.videoTag),
       };
-    } else {
-      return { type: 'response', data: Response.json(null, { status: 400 }) };
+    }
+    else {
+      const v = await db.query.videos.findFirst({
+        where: and(
+          public_id ? eq(videos.publicId, public_id) : undefined,
+          eq(videos.userId, user.id)
+        ),
+        with: {
+          uploads: true,
+          videoTagMaps: {
+            columns: {},       // skip join table fields
+            with: { videoTag: true },
+          },
+        },
+      });
+
+      if(!v) {
+        return { type: 'response', data: Response.json(null, { status: 404 }) };
+      }
+      const { videoTagMaps, uploads, ...videoRest } = v
+      const { tusInfo, state, ...uploadRest } = uploads[0];
+      video = {
+        ...videoRest,
+        upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata, state: state }},
+        tags: v.videoTagMaps.map(m => m.videoTag),
+      };
     }
 
     return { type: 'video', data: video };
 }
 
+export async function getValidAdminVideos(user:User): Promise<Array<typeof videos.$inferSelect>> {
+    const va = await db.query.videos.findMany({
+      where: and(
+        eq(videos.userId, user.id)
+      ),
+      with: {
+        //transcodeInfos: true,
+        uploads: {
+          with:  {
+              transcodeJobs: {
+                  columns: {
+                      state: true,
+                  }
+              }
+          }
+        },
+        videoTagMaps: {
+          columns: {},       // skip join table fields
+          with: { videoTag: true },
+        },
+      },
+      orderBy: [ desc(videos.createdAt) ]
+    });
+
+    const video_list = [];
+    for (const v of va) {
+      const { videoTagMaps, uploads, ...videoRest } = v
+      const { tusInfo, state, transcodeJobs, ...uploadRest } = uploads[0];
+      const video = {
+        ...videoRest,
+        upload: { tusInfo: { id: tusInfo.id, metadata: tusInfo.metadata, state: state }, transcodeJobs: transcodeJobs },
+        tags: v.videoTagMaps.map(m => m.videoTag),
+      };
+      video_list.push(video)
+    }
+
+    return video_list;
+}
 
 export async function getVideo(req: Request): Promise<Response> {
   try {
@@ -236,19 +273,27 @@ export async function updateVideo(req: Request): Promise<Response> {
     const wasNotPublicOrUsers = video.visibilityState !== 'public' && video.visibilityState !== 'users';
     const becomingPublicOrUsers = visibilityState === 'public' || visibilityState === 'users';
 
-    const [ updated ] = await db.update(videos).set(updateData).where(
-          eq(videos.id, video.id)
-    ).returning();
+    if(Object.keys(updateData).length > 0) {
+      const [ updated ] = await db.update(videos).set(updateData).where(
+            eq(videos.id, video.id)
+      ).returning();
 
-    // Send notification if video just became public or users AND is ready
-    if (wasNotPublicOrUsers && becomingPublicOrUsers && video.ready) {
-      // Don't await - send notifications in background
-      notifyNewVideo(video.id, video.userId).catch(err =>
-        console.error('Error sending new video notifications:', err)
-      );
+      // Send notification if video just became public or users AND is ready
+      if (wasNotPublicOrUsers && becomingPublicOrUsers && video.ready) {
+        // Don't await - send notifications in background
+        notifyNewVideo(video.id, video.userId).catch(err =>
+          console.error('Error sending new video notifications:', err)
+        );
+      }
+
+      // we simply query the updated video again
+      const { type, data } = await getValidAdminVideo(user, public_id);
+      if(type === 'response') {
+        return data
+      }
+      return Response.json(data);
     }
-
-    return Response.json(updated);
+    return Response.json(video);
 
   } catch (error) {
     console.error("Update video error:", error);
@@ -273,22 +318,23 @@ export async function deleteVideo(req: Request): Promise<Response> {
     await db.transaction(async (tx) => {
       const [ upload ] = await tx.select().from(uploads).where(eq(uploads.videoId, video!.id));
       const [ transcodeJob ] = await tx.select().from(transcodeJobs).where(eq(transcodeJobs.uploadId, upload!.id));
-      if(!transcodeJob?.inputPath) {
-        console.error(`unable to delete video, tus upload not found`, video, upload, transcodeJob);
-        return
+      await tx.delete(transcodeJobs).where(eq(transcodeJobs.uploadId, upload!.id));
+      await tx.delete(transcodeInfo).where(eq(transcodeInfo.videoId, video.id));
+      await tx.delete(uploads).where(eq(uploads.videoId, video.id));
+      await tx.delete(videos).where(eq(videos.id, video.id));
+      if(transcodeJob) {
+        if (!(await fs.exists(transcodeJob?.outputPath))){
+          console.error(`unable to remove transcode output dir (not found)`, transcodeJob?.outputPath);
+        }
+        await fs.rm(transcodeJob?.outputPath, { recursive: true, force: true }).catch((e:any) => console.error(e));
+        await fs.unlink(transcodeJob?.inputPath).catch((e:any) => console.error(e));
+        await fs.unlink(`${transcodeJob?.inputPath}.json`).catch((e:any) => console.error(e));
+      } else {
+        console.error(`no transcode job found for upload, not deleting any files`, upload)
       }
-      if(!transcodeJob.inputPath.startsWith("./data/uploads")) {
-        console.error(`unable to delete video, '${transcodeJob.inputPath}' not in './data/uploads/'`, transcodeJob);
-        return
-      }
-      await fs.unlink(transcodeJob.inputPath);
-      await tx.delete(transcodeJobs).where(eq(videos.publicId, public_id));
-      await tx.delete(transcodeInfo).where(eq(videos.publicId, public_id));
-      await tx.delete(uploads).where(eq(uploads.videoId, public_id));
-      await tx.delete(videos).where(eq(videos.publicId, public_id));
     });
 
-    return Response.json(true);
+    return Response.json(video);
 
   } catch (error) {
     console.error("Create video entry error:", error);
@@ -301,25 +347,7 @@ export async function getOwnVideos(req: Request) {
   if (!user) {
     return Response.json({ error: "Authentication required" }, { status: 401 });
   }
-  const my_videos = await db.query.videos.findMany({
-    with: {
-        transcodeInfos: true,
-        uploads: {
-            columns: {
-                state: true
-            },
-            with:  {
-                transcodeJobs: {
-                    columns: {
-                        state: true,
-                    }
-                }
-            }
-        }
-    },
-    where: eq(videos.userId, user.id),
-    orderBy: [ desc(videos.createdAt) ]
-  });
+  const my_videos = await getValidAdminVideos(user);
   return Response.json(my_videos);
 }
 
