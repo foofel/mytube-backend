@@ -3,24 +3,24 @@ services:
     environment:
       - NODE_ENV=production
     env_file: ".env.production"
-    ports: []
+    ports: !reset []
 
   frontend:
     environment:
       - NUXT_PUBLIC_BASE_URL=https://gan.ba
       - NODE_ENV=production
-    ports: []
+    ports: !reset []
 
   postgres:
-    ports: []
+    ports: !reset []
 
   redis:
-    ports: []
+    ports: !reset []
 
   caddy:
     volumes:
       - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
-    extra_hosts: []
+    extra_hosts: !reset []
 
 volumes:
   caddy-data:
