@@ -64,7 +64,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config/Caddyfile.dev:/etc/caddy/Caddyfile:ro
       - ./data/images/:/var/www/mytube/images
       - ./data/videos/:/var/www/mytube/videos
       - ./data/caddy:/data
