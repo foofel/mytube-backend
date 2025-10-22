@@ -1,5 +1,5 @@
 services:
-  mytube-backend:
+  backend:
     environment:
       - NODE_ENV=production
     env_file: ".env.production"

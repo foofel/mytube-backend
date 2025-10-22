@@ -1,5 +1,5 @@
 services:
-  mytube-backend:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
