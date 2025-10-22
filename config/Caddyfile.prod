@@ -1,5 +1,4 @@
-# gan.ba, www.gan.ba {
-powa.lan {
+gan.ba, www.gan.ba {
   encode zstd gzip
 
   # --- CORS ---

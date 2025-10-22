@@ -1,0 +1,41 @@
+powa.lan {
+  tls internal
+  encode zstd gzip
+
+  # --- CORS ---
+  header {
+    Access-Control-Allow-Origin "*"
+    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    Access-Control-Allow-Headers "*"
+    Access-Control-Max-Age "86400"
+  }
+
+  # Preflight handling
+  @preflight {
+    method OPTIONS
+    header Origin *
+    header Access-Control-Request-Method *
+  }
+  respond @preflight 204
+
+  # --- Static files ---
+  handle_path /static/* {
+    root * /var/www/mytube
+    file_server
+  }
+
+  # --- API ---
+  handle /api/* {
+    reverse_proxy http://backend:8080
+  }
+
+  # --- TUS (via API) ---
+  handle /files/* {
+    reverse_proxy http://backend:8080
+  }
+
+  # --- Frontend (everything else) ---
+  handle {
+    reverse_proxy http://frontend:3000
+  }
+}

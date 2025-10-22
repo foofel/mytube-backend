@@ -19,7 +19,7 @@ services:
 
   caddy:
     volumes:
-      - ./config/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
     extra_hosts: []
 
 volumes:
