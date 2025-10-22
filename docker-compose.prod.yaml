@@ -3,6 +3,9 @@ services:
     environment:
       - NODE_ENV=production
     env_file: ".env.production"
+    volumes:
+      - /mnt/storagebox/mytube/videos:/app/data/videos
+      - /mnt/storagebox/mytube/uploads:/app/data/uploads
     ports: !reset []
 
   frontend:
@@ -20,6 +23,7 @@ services:
   caddy:
     volumes:
       - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - /mnt/storagebox/mytube/videos/:/var/www/mytube/videos
     extra_hosts: !reset []
 
 volumes:

@@ -70,3 +70,5 @@ services:
       - ./logs/caddy:/var/log/
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux trick
+
+
