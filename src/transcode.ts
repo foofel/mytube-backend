@@ -201,11 +201,11 @@ async function generatePosterImages(outputDir: string): Promise<void> {
 
     // AVIF conversion configurations (matching transcode.sh quality expectations)
     const configs = [
-        { width: 854, name: 'poster_480p', quality: 80, effort: 6 },
-        { width: 1280, name: 'poster_720p', quality: 80, effort: 6 },
-        { width: 1920, name: 'poster_1080p', quality: 80, effort: 6 },
-        { width: 2560, name: 'poster_1440p', quality: 82, effort: 7 },
-        { width: 3840, name: 'poster_2160p', quality: 82, effort: 7 },
+        { width: 854, name: 'poster_480p', quality: 80, effort: 3 },
+        { width: 1280, name: 'poster_720p', quality: 80, effort: 3 },
+        { width: 1920, name: 'poster_1080p', quality: 80, effort: 3 },
+        { width: 2560, name: 'poster_1440p', quality: 80, effort: 3 },
+        { width: 3840, name: 'poster_2160p', quality: 80, effort: 3 },
     ];
 
     // Convert all variants in parallel using Sharp

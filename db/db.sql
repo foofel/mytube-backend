@@ -1,3 +1,10 @@
+create extension if not exists unaccent;
+create extension if not exists pg_trgm;
+
+CREATE TYPE video_visibility_state AS ENUM ('public', 'shareable', 'users', 'friends', 'private');
+CREATE TYPE upload_state_type AS ENUM ('created', 'partially_uploaded', 'completed');
+CREATE TYPE transcode_state_type AS ENUM ('created', 'transcoding', 'failed', 'completed');
+
 -- === Base tables ===
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -14,7 +21,6 @@ CREATE TABLE passwords (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
---CREATE TYPE video_visibility_state AS ENUM ('public', 'shareable', 'users', 'friends', 'private');
 CREATE TABLE videos (
     id           BIGSERIAL PRIMARY KEY,
     public_id    TEXT NOT NULL, -- youtube like
@@ -33,9 +39,6 @@ CREATE TABLE videos (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
---CREATE TYPE upload_state_type AS ENUM ('created', 'partially_uploaded', 'completed');
---CREATE TYPE transcode_state_type AS ENUM ('created', 'transcoding', 'failed', 'completed');
-
 CREATE TABLE uploads (
     id          BIGSERIAL PRIMARY KEY,
     video_id    BIGINT NOT NULL REFERENCES videos(id) ON delete CASCADE,
@@ -44,6 +47,7 @@ CREATE TABLE uploads (
     tus_info    JSONB NOT NULL,
     state       upload_state_type NOT NULL DEFAULT 'created',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE transcode_jobs (

@@ -64,7 +64,7 @@ export async function saveSubscription(
       .values({
         userId,
         endpoint: subscription.endpoint,
-        p256Dh: subscription.keys.p256dh,
+        p256dh: subscription.keys.p256dh,
         auth: subscription.keys.auth,
         userAgent: userAgent || null,
         createdAt: new Date().toISOString(),
@@ -73,7 +73,7 @@ export async function saveSubscription(
       .onConflictDoUpdate({
         target: [pushSubscriptions.userId, pushSubscriptions.endpoint],
         set: {
-          p256Dh: subscription.keys.p256dh,
+          p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
           lastUsed: new Date().toISOString(),
         },
@@ -158,7 +158,7 @@ export async function sendNotificationToUser(
         const pushSubscription = {
           endpoint: sub.endpoint,
           keys: {
-            p256dh: sub.p256Dh,
+            p256dh: sub.p256dh,
             auth: sub.auth,
           },
         };

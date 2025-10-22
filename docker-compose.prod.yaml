@@ -1,0 +1,26 @@
+services:
+  mytube-backend:
+    environment:
+      - NODE_ENV=production
+    env_file: ".env.production"
+    ports: []
+
+  frontend:
+    environment:
+      - NUXT_PUBLIC_BASE_URL=https://gan.ba
+      - NODE_ENV=production
+    ports: []
+
+  postgres:
+    ports: []
+
+  redis:
+    ports: []
+
+  caddy:
+    volumes:
+      - ./config/Caddyfile.production:/etc/caddy/Caddyfile:ro
+    extra_hosts: []
+
+volumes:
+  caddy-data:

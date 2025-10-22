@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { users, passwords, videos, uploads, transcodeJobs, transcodeInfo, pushSubscriptions, notificationQueue, videoTagMap, videoTags } from "./schema";
+import { users, passwords, videos, uploads, transcodeJobs, transcodeInfo, videoTagMap, videoTags, pushSubscriptions, notificationQueue } from "./schema";
 
 export const passwordsRelations = relations(passwords, ({one}) => ({
 	user: one(users, {
@@ -23,8 +23,8 @@ export const videosRelations = relations(videos, ({one, many}) => ({
 	}),
 	uploads: many(uploads),
 	transcodeInfos: many(transcodeInfo),
-	notificationQueues: many(notificationQueue),
 	videoTagMaps: many(videoTagMap),
+	notificationQueues: many(notificationQueue),
 }));
 
 export const uploadsRelations = relations(uploads, ({one, many}) => ({
@@ -53,6 +53,21 @@ export const transcodeInfoRelations = relations(transcodeInfo, ({one}) => ({
 	}),
 }));
 
+export const videoTagMapRelations = relations(videoTagMap, ({one}) => ({
+	video: one(videos, {
+		fields: [videoTagMap.videoId],
+		references: [videos.id]
+	}),
+	videoTag: one(videoTags, {
+		fields: [videoTagMap.tagId],
+		references: [videoTags.id]
+	}),
+}));
+
+export const videoTagsRelations = relations(videoTags, ({many}) => ({
+	videoTagMaps: many(videoTagMap),
+}));
+
 export const pushSubscriptionsRelations = relations(pushSubscriptions, ({one}) => ({
 	user: one(users, {
 		fields: [pushSubscriptions.userId],
@@ -69,19 +84,4 @@ export const notificationQueueRelations = relations(notificationQueue, ({one}) =
 		fields: [notificationQueue.videoId],
 		references: [videos.id]
 	}),
-}));
-
-export const videoTagMapRelations = relations(videoTagMap, ({one}) => ({
-	video: one(videos, {
-		fields: [videoTagMap.videoId],
-		references: [videos.id]
-	}),
-	videoTag: one(videoTags, {
-		fields: [videoTagMap.tagId],
-		references: [videoTags.id]
-	}),
-}));
-
-export const videoTagsRelations = relations(videoTags, ({many}) => ({
-	videoTagMaps: many(videoTagMap),
 }));

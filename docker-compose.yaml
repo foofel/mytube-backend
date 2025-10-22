@@ -1,15 +1,40 @@
 services:
-  #mytube-backend:
-  #  image: .
-  # container_name: mytube-backend
-  #  build:
-  #    context: .
-  #    dockerfile: Dockerfile
+  mytube-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: ".env.production"
+    container_name: mytube-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=8080
+    volumes:
+      - ./data/videos:/app/data/videos
+      - ./data/uploads:/app/data/uploads
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: mytube-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - NUXT_PUBLIC_BASE_URL=https://powa.lan
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=3000
+    ports:
+      - "3000:3000"
 
   postgres:
-    image: postgres:17-alpine
-    container_name: postgres
-    restart: no
+    image: postgres:18-trixie
+    container_name: mytube-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -17,33 +42,24 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./db:/docker-entrypoint-initdb.d
 
   redis:
-    image: redis:8-alpine
-    container_name: redis
-    restart: no
+    image: redis:8-bookworm
+    container_name: mytube-redis
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]   # enable AOF persistence
     ports:
       - "6379:6379"
     volumes:
       - ./data/redis:/data
 
-  #tusd:
-  #  image: tusproject/tusd:latest
-  #  container_name: tusd
-  #  restart: no
-  #  user: "${DOCKER_UID}:${DOCKER_GID}"
-  #  ports:
-  #    - "6380:8080"
-  #  volumes:
-  #      - ./data/uploads:/srv/tusd-data/data
-  #  command: -verbose
-
   caddy:
     image: caddy:2-alpine
-    container_name: caddy
-    restart: no
+    container_name: mytube-caddy
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -51,11 +67,7 @@ services:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/images/:/var/www/mytube/images
       - ./data/videos/:/var/www/mytube/videos
-      #- caddy-data:/data   # certificates, storage
       - ./data/caddy:/data
       - ./logs/caddy:/var/log/
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux trick
-
-volumes:
-  caddy-data:

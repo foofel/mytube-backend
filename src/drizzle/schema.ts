@@ -1,7 +1,7 @@
-import { pgTable, index, bigserial, text, timestamp, foreignKey, bigint, check, point, boolean, uniqueIndex, jsonb, integer, doublePrecision, unique, primaryKey, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, index, bigserial, text, timestamp, foreignKey, bigint, check, point, boolean, uniqueIndex, jsonb, integer, doublePrecision, unique, pgEnum } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
-export const transcodeStateType = pgEnum("transcode_state_type", ['created', 'transcoding', 'failed', 'completed'])
+export const transcodeStateType = pgEnum("transcode_state_type", ['created', 'transcoding', 'completed'])
 export const uploadStateType = pgEnum("upload_state_type", ['created', 'partially_uploaded', 'completed'])
 export const videoVisibilityState = pgEnum("video_visibility_state", ['public', 'shareable', 'users', 'friends', 'private'])
 
@@ -36,6 +36,9 @@ export const videos = pgTable("videos", {
 	title: text(),
 	description: text(),
 	posterImage: text("poster_image"),
+	extRef: text("ext_ref"),
+	gps: point(),
+	ready: boolean().default(false).notNull(),
 	// You can use { mode: "number" } if numbers are exceeding js number limitations
 	likes: bigint({ mode: "number" }).default(0).notNull(),
 	// You can use { mode: "number" } if numbers are exceeding js number limitations
@@ -47,14 +50,10 @@ export const videos = pgTable("videos", {
 	visibilityState: videoVisibilityState("visibility_state").default('private').notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
-	extRef: text("ext_ref"),
-	gps: point(),
-	ready: boolean().default(false).notNull(),
 }, (table) => [
 	index("idx_videos_desc_trgm_ci").using("gin", sql`norm_ci(description)`),
 	index("idx_videos_title_trgm_ci").using("gin", sql`norm_ci(title)`),
-	index("videos_description_lower_gin_trgm_idx").using("gin", sql`lower(description)`),
-	index("videos_title_lower_gin_trgm_idx").using("gin", sql`lower(title)`),
+	index().using("btree", table.publicId.asc().nullsLast().op("text_ops")),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -75,6 +74,7 @@ export const uploads = pgTable("uploads", {
 	tusInfo: jsonb("tus_info").notNull(),
 	state: uploadStateType().default('created').notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	uniqueIndex("uploads_tus_id_uq").using("btree", table.tusId.asc().nullsLast().op("text_ops")),
 	index("uploads_user_id_created_at_idx").using("btree", table.userId.asc().nullsLast().op("int8_ops"), table.createdAt.desc().nullsFirst().op("timestamptz_ops")),
@@ -143,6 +143,28 @@ export const transcodeInfo = pgTable("transcode_info", {
 	check("transcode_info_fps_check", sql`fps >= (0)::double precision`),
 ]);
 
+export const videoTagMap = pgTable("video_tag_map", {
+	id: bigserial({ mode: "number" }).primaryKey().notNull(),
+	// You can use { mode: "number" } if numbers are exceeding js number limitations
+	videoId: bigint("video_id", { mode: "number" }).notNull(),
+	// You can use { mode: "number" } if numbers are exceeding js number limitations
+	tagId: bigint("tag_id", { mode: "number" }).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+}, (table) => [
+	index("video_tag_map_tag_id_video_id_idx").using("btree", table.tagId.asc().nullsLast().op("int8_ops"), table.videoId.asc().nullsLast().op("int8_ops")),
+	foreignKey({
+			columns: [table.videoId],
+			foreignColumns: [videos.id],
+			name: "video_tag_map_video_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.tagId],
+			foreignColumns: [videoTags.id],
+			name: "video_tag_map_tag_id_fkey"
+		}).onDelete("cascade"),
+	unique("video_tag_map_video_id_tag_id_key").on(table.videoId, table.tagId),
+]);
+
 export const videoTags = pgTable("video_tags", {
 	id: bigserial({ mode: "number" }).primaryKey().notNull(),
 	tag: text().notNull(),
@@ -158,7 +180,7 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 	// You can use { mode: "number" } if numbers are exceeding js number limitations
 	userId: bigint("user_id", { mode: "number" }).notNull(),
 	endpoint: text().notNull(),
-	p256Dh: text("p256dh").notNull(),
+	p256dh: text().notNull(),
 	auth: text().notNull(),
 	userAgent: text("user_agent"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
@@ -199,25 +221,4 @@ export const notificationQueue = pgTable("notification_queue", {
 			foreignColumns: [videos.id],
 			name: "notification_queue_video_id_fkey"
 		}).onDelete("cascade"),
-]);
-
-export const videoTagMap = pgTable("video_tag_map", {
-	// You can use { mode: "number" } if numbers are exceeding js number limitations
-	videoId: bigint("video_id", { mode: "number" }).notNull(),
-	// You can use { mode: "number" } if numbers are exceeding js number limitations
-	tagId: bigint("tag_id", { mode: "number" }).notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
-}, (table) => [
-	index("video_tag_map_tag_id_video_id_idx").using("btree", table.tagId.asc().nullsLast().op("int8_ops"), table.videoId.asc().nullsLast().op("int8_ops")),
-	foreignKey({
-			columns: [table.videoId],
-			foreignColumns: [videos.id],
-			name: "video_tag_map_video_id_fkey"
-		}).onDelete("cascade"),
-	foreignKey({
-			columns: [table.tagId],
-			foreignColumns: [videoTags.id],
-			name: "video_tag_map_tag_id_fkey"
-		}).onDelete("cascade"),
-	primaryKey({ columns: [table.videoId, table.tagId], name: "video_tag_map_pkey"}),
 ]);
